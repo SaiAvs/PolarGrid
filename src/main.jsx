@@ -11,7 +11,7 @@ import {LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Cartesian
 import "./styles.css";
 
 const navItems = [
-  ["dashboard","Dashboard",Gauge],["data","Station Data Entry",Database],["monitoring","Energy Monitoring",Activity],["forecast","AI Forecast",BrainCircuit],
+  ["dashboard","Dashboard",Gauge],["setup","Station Setup",Settings],["data","Station Data Entry",Database],["monitoring","Energy Monitoring",Activity],["forecast","AI Forecast",BrainCircuit],
   ["renewable","Renewable Energy",Leaf],["storage","Storage",BatteryCharging],["fuel","Fuel Optimization",Fuel],
   ["recommendations","AI Recommendations",Lightbulb],["alerts","Alerts",AlertTriangle],["simulation","Simulation",SlidersHorizontal],
   ["analytics","Analytics",BarChart3],["reports","Reports",FileText]
@@ -126,6 +126,66 @@ function derive(d){
  return {generation,consumption,fuelPct,renewableShare,gap,dailyGap,backupLiters,daysFuel,batteryKwh,renewableIndex,forecastDemand:Number(d.forecastDemand)||0,forecastRenewable:Number(d.forecastRenewable)||0,batterySoc:Number(d.batterySoc)||0};
 }
 
+function getStationForUser(email){
+ try{
+  const all=JSON.parse(localStorage.getItem("polargrid_stations")||"{}");
+  return email && all[email] ? all[email] : null;
+ }catch{return null}
+}
+
+function saveStationForUser(email,station){
+ try{
+  const all=JSON.parse(localStorage.getItem("polargrid_stations")||"{}");
+  all[email]=station;
+  localStorage.setItem("polargrid_stations",JSON.stringify(all));
+ }catch{}
+}
+
+function StationSetup({user,data,onSave}){
+ const saved=getStationForUser(user?.email);
+ const [form,setForm]=useState(saved||{
+  stationName:data.stationName,region:data.region,timezone:"UTC",location:"Polar Region",
+  personnel:50,renewableCapacity:150,batteryCapacity:data.batteryCapacity,tankCapacity:data.tankCapacity
+ });
+ const [savedMsg,setSavedMsg]=useState("");
+ const update=(k,v)=>setForm(f=>({...f,[k]:v}));
+ const submit=e=>{
+  e.preventDefault();
+  const station={...form,personnel:Number(form.personnel),renewableCapacity:Number(form.renewableCapacity),batteryCapacity:Number(form.batteryCapacity),tankCapacity:Number(form.tankCapacity)};
+  saveStationForUser(user?.email,station);
+  onSave(station);
+  setSavedMsg("Station profile saved successfully.");
+ };
+ return <Page title="Station Setup" sub="Configure the research station profile used across PolarGrid analysis, dashboards and reports.">
+  <form onSubmit={submit}>
+   <div className="grid2">
+    <div className="card"><div className="card-title"><div><h3>Station identity</h3><p>Define the operating location and station context.</p></div><Settings size={18} color="#69e7f5"/></div>
+     <div className="field"><label>STATION NAME</label><input value={form.stationName} onChange={e=>update("stationName",e.target.value)} placeholder="e.g. Aurora Research Station"/></div>
+     <div className="field"><label>POLAR REGION / LOCATION</label><input value={form.location} onChange={e=>update("location",e.target.value)} placeholder="e.g. Antarctica"/></div>
+     <div className="field"><label>REGION LABEL</label><input value={form.region} onChange={e=>update("region",e.target.value)} placeholder="e.g. East Antarctica"/></div>
+     <div className="field"><label>TIME ZONE</label><input value={form.timezone} onChange={e=>update("timezone",e.target.value)} placeholder="UTC"/></div>
+    </div>
+    <div className="card"><div className="card-title"><div><h3>Station capacity</h3><p>Baseline infrastructure values used by decision-support calculations.</p></div><Gauge size={18} color="#54d89b"/></div>
+     <div className="grid2">
+      <div className="field"><label>PERSONNEL</label><input type="number" min="1" value={form.personnel} onChange={e=>update("personnel",e.target.value)}/></div>
+      <div className="field"><label>RENEWABLE CAPACITY</label><input type="number" min="0" value={form.renewableCapacity} onChange={e=>update("renewableCapacity",e.target.value)}/></div>
+      <div className="field"><label>BATTERY CAPACITY</label><input type="number" min="0" value={form.batteryCapacity} onChange={e=>update("batteryCapacity",e.target.value)}/></div>
+      <div className="field"><label>FUEL TANK CAPACITY</label><input type="number" min="0" value={form.tankCapacity} onChange={e=>update("tankCapacity",e.target.value)}/></div>
+     </div>
+    </div>
+   </div>
+   <div className="card" style={{marginTop:16}}><div className="card-title"><div><h3>Configuration summary</h3><p>This profile is stored locally for the signed-in account in the current prototype.</p></div><Database size={18} color="#f4c56b"/></div>
+    <div className="grid3">
+     <div className="callout"><b>{form.stationName||"Unnamed station"}</b><br/><span>{form.location||"Polar location"}</span></div>
+     <div className="callout"><b>{form.renewableCapacity||0} kW</b><br/><span>Renewable capacity</span></div>
+     <div className="callout"><b>{form.batteryCapacity||0} kWh</b><br/><span>Battery capacity</span></div>
+    </div>
+   </div>
+   <div className="card" style={{marginTop:16}}><div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}><button className="btn primary" type="submit"><CheckCircle2 size={15}/> Save Station Profile</button>{savedMsg&&<span className="positive" style={{fontSize:12}}>{savedMsg}</span>}</div></div>
+  </form>
+ </Page>
+}
+
 function StationData({data,onRun,onDemo}){
  const [form,setForm]=useState(data);
  const update=(key,value)=>setForm(f=>({...f,[key]:value}));
@@ -203,15 +263,15 @@ function Page({title,sub,children}){return <div><div className="page-title"><div
 function App(){
  const [view,setView]=useState(()=>{try{return localStorage.getItem("polargrid_session")?"app":"landing"}catch{return "landing"}}),[page,setPage]=useState("dashboard"),[role,setRole]=useState("manager"),[currentUser,setCurrentUser]=useState(null),[sideOpen,setSideOpen]=useState(false),[stationData,setStationData]=useState(DEMO_STATION);
  const analysis=useMemo(()=>derive(stationData),[stationData]);
- React.useEffect(()=>{try{const session=JSON.parse(localStorage.getItem("polargrid_session")||"null");if(session){setCurrentUser(session);setRole(session.role||"manager");setView("app");}}catch{localStorage.removeItem("polargrid_session");}seedDemoUsers();},[]);
- const login=user=>{setCurrentUser(user);setRole(user.role||"manager");setView("app");setPage("dashboard")};
+ React.useEffect(()=>{try{const session=JSON.parse(localStorage.getItem("polargrid_session")||"null");if(session){setCurrentUser(session);setRole(session.role||"manager");setView("app");const saved=getStationForUser(session.email);if(saved){setStationData(d=>({...d,...saved,batteryCapacity:Number(saved.batteryCapacity)||d.batteryCapacity,tankCapacity:Number(saved.tankCapacity)||d.tankCapacity}));}}}catch{localStorage.removeItem("polargrid_session");}seedDemoUsers();},[]);
+ const login=user=>{setCurrentUser(user);setRole(user.role||"manager");const saved=getStationForUser(user.email);if(saved){setStationData(d=>({...d,...saved,batteryCapacity:Number(saved.batteryCapacity)||d.batteryCapacity,tankCapacity:Number(saved.tankCapacity)||d.tankCapacity}));setPage("dashboard")}else{setPage("setup")}setView("app")};
  const logout=()=>{localStorage.removeItem("polargrid_session");setCurrentUser(null);setRole("manager");setPage("dashboard");setView("landing")};
  const runAnalysis=data=>{setStationData({...data,currentGeneration:Number(data.solarGeneration)+Number(data.windGeneration)});setPage("dashboard")};
  const resetDemo=()=>{setStationData(DEMO_STATION);setPage("dashboard")};
  if(view==="landing") return <Landing onLogin={()=>setView("login")}/>;
  if(view==="login") return <Login onLogin={login} onBack={()=>setView("landing")}/>;
  const roleLabel=role==="admin"?"Station Administrator":role==="operations"?"Operations Personnel":"Station Energy Manager";
- const content={data:<StationData data={stationData} onRun={runAnalysis} onDemo={resetDemo}/>,dashboard:<DashboardHome d={stationData} a={analysis}/>,monitoring:<Monitoring d={stationData} a={analysis}/>,forecast:<Forecast d={stationData} a={analysis}/>,renewable:<Renewable d={stationData} a={analysis}/>,storage:<Storage d={stationData} a={analysis}/>,fuel:<FuelOptimization d={stationData} a={analysis}/>,recommendations:<RecommendationsPage d={stationData} a={analysis}/>,alerts:<AlertsPage d={stationData} a={analysis}/>,simulation:<Simulation d={stationData} a={analysis}/>,analytics:<Analytics d={stationData} a={analysis}/>,reports:<Reports d={stationData} a={analysis}/>} [page]||<DashboardHome d={stationData} a={analysis}/>;
+ const content={setup:<StationSetup user={currentUser} data={stationData} onSave={station=>{setStationData(d=>({...d,stationName:station.stationName,region:station.region,batteryCapacity:station.batteryCapacity,tankCapacity:station.tankCapacity}));setPage("dashboard")}}/>,data:<StationData data={stationData} onRun={runAnalysis} onDemo={resetDemo}/>,dashboard:<DashboardHome d={stationData} a={analysis}/>,monitoring:<Monitoring d={stationData} a={analysis}/>,forecast:<Forecast d={stationData} a={analysis}/>,renewable:<Renewable d={stationData} a={analysis}/>,storage:<Storage d={stationData} a={analysis}/>,fuel:<FuelOptimization d={stationData} a={analysis}/>,recommendations:<RecommendationsPage d={stationData} a={analysis}/>,alerts:<AlertsPage d={stationData} a={analysis}/>,simulation:<Simulation d={stationData} a={analysis}/>,analytics:<Analytics d={stationData} a={analysis}/>,reports:<Reports d={stationData} a={analysis}/>} [page]||<DashboardHome d={stationData} a={analysis}/>;
  return <div className="shell"><Sidebar page={page} setPage={setPage} open={sideOpen} setOpen={setSideOpen} onLogout={logout}/><main className="main"><div className="dash-top"><div style={{display:"flex",alignItems:"center",gap:10}}><button className="menu-btn" onClick={()=>setSideOpen(true)}><Menu size={18}/></button><span style={{fontSize:12,color:"#7890a2"}}>{stationData.stationName}</span></div><div className="user-pill"><span>{currentUser?.name||roleLabel} • {roleLabel}</span><div className="avatar"><User size={15}/></div></div></div><div className="dashboard">{content}</div></main></div>
 }
 
