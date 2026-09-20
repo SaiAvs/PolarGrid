@@ -51,10 +51,55 @@ function Landing({onLogin}){
  </div>
 }
 
+function getStoredUsers(){
+ try{const saved=JSON.parse(localStorage.getItem("polargrid_users")||"[]");return Array.isArray(saved)?saved:[]}catch{return []}
+}
+
+function seedDemoUsers(){
+ const demos=[
+  {name:"Demo Manager",email:"manager@polargrid.demo",password:"PolarGrid123",role:"manager"},
+  {name:"Demo Administrator",email:"admin@polargrid.demo",password:"PolarGrid123",role:"admin"},
+  {name:"Demo Operations",email:"operations@polargrid.demo",password:"PolarGrid123",role:"operations"}
+ ];
+ const users=getStoredUsers(); let changed=false;
+ demos.forEach(d=>{if(!users.some(u=>u.email===d.email)){users.push(d);changed=true;}});
+ if(changed)localStorage.setItem("polargrid_users",JSON.stringify(users));
+ return users;
+}
+
 function Login({onLogin,onBack}){
- const [email,setEmail]=useState("manager@polargrid.demo"),[password,setPassword]=useState("PolarGrid123"),[err,setErr]=useState("");
- const submit=e=>{e.preventDefault(); if(password==="PolarGrid123" && ["manager@polargrid.demo","admin@polargrid.demo","operations@polargrid.demo"].includes(email.toLowerCase())) onLogin(email); else setErr("Use one of the demo accounts shown below.");};
- return <div className="login-page"><div className="card login-card"><button className="btn ghost small" onClick={onBack}>← Back</button><div style={{marginTop:25}}><Brand/><h1>Station workspace</h1><p>Sign in to view the energy intelligence dashboard.</p></div><form onSubmit={submit}><div className="field"><label>EMAIL</label><input value={email} onChange={e=>setEmail(e.target.value)} type="email"/></div><div className="field"><label>PASSWORD</label><input value={password} onChange={e=>setPassword(e.target.value)} type="password"/></div>{err&&<div className="error">{err}</div>}<button className="btn primary" style={{width:"100%",marginTop:15}}>Sign in <ArrowRight size={15} style={{verticalAlign:"middle"}}/></button></form><div className="demo-box"><b>Demo accounts</b><br/>Manager: manager@polargrid.demo<br/>Admin: admin@polargrid.demo<br/>Operations: operations@polargrid.demo<br/>Password: PolarGrid123</div></div></div>
+ const [mode,setMode]=useState("login"),[email,setEmail]=useState("manager@polargrid.demo"),[password,setPassword]=useState("PolarGrid123");
+ const [name,setName]=useState(""),[confirmPassword,setConfirmPassword]=useState(""),[role,setRole]=useState("manager"),[err,setErr]=useState("");
+ const submit=e=>{
+  e.preventDefault(); setErr(""); const users=seedDemoUsers(); const normalized=email.trim().toLowerCase();
+  if(mode==="login"){const user=users.find(u=>u.email===normalized&&u.password===password);if(!user){setErr("Account not found or password is incorrect.");return;}localStorage.setItem("polargrid_session",JSON.stringify({name:user.name,email:user.email,role:user.role}));onLogin(user);return;}
+  if(!name.trim()){setErr("Please enter your full name.");return;}
+  if(!normalized){setErr("Please enter your email address.");return;}
+  if(password.length<8){setErr("Password must contain at least 8 characters.");return;}
+  if(password!==confirmPassword){setErr("Passwords do not match.");return;}
+  if(users.some(u=>u.email===normalized)){setErr("An account with this email already exists. Sign in instead.");return;}
+  const user={name:name.trim(),email:normalized,password,role};
+  localStorage.setItem("polargrid_users",JSON.stringify([...users,user]));
+  localStorage.setItem("polargrid_session",JSON.stringify({name:user.name,email:user.email,role:user.role}));
+  onLogin(user);
+ };
+ const switchMode=next=>{setMode(next);setErr("");if(next==="login"){setPassword("PolarGrid123");setConfirmPassword("");setName("");setRole("manager");}else{setPassword("");setEmail("");}};
+ const roleNames={manager:"Station Energy Manager",admin:"Station Administrator",operations:"Operations Personnel"};
+ return <div className="login-page"><div className="card login-card">
+  <button className="btn ghost small" onClick={onBack}>← Back</button>
+  <div style={{marginTop:25}}><Brand/><h1>{mode==="login"?"Station workspace":"Create your workspace account"}</h1><p>{mode==="login"?"Sign in to view the energy intelligence dashboard.":"Create an account to access the PolarGrid station workspace."}</p></div>
+  <div style={{display:"flex",gap:8,margin:"20px 0 8px"}}><button type="button" className={"btn small "+(mode==="login"?"primary":"")} onClick={()=>switchMode("login")}>Sign in</button><button type="button" className={"btn small "+(mode==="register"?"primary":"")} onClick={()=>switchMode("register")}>Create account</button></div>
+  <form onSubmit={submit}>
+   {mode==="register"&&<div className="field"><label>FULL NAME</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="Your full name"/></div>}
+   <div className="field"><label>EMAIL</label><input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="you@example.com"/></div>
+   {mode==="register"&&<div className="field"><label>ROLE</label><div style={{display:"grid",gap:8}}>{Object.entries(roleNames).map(([value,label])=><button key={value} type="button" className={"btn small "+(role===value?"primary":"ghost")} onClick={()=>setRole(value)} style={{textAlign:"left"}}>{label}</button>)}</div></div>}
+   <div className="field"><label>PASSWORD</label><input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder={mode==="register"?"Minimum 8 characters":""}/></div>
+   {mode==="register"&&<div className="field"><label>CONFIRM PASSWORD</label><input value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} type="password"/></div>}
+   {err&&<div className="error">{err}</div>}
+   <button className="btn primary" style={{width:"100%",marginTop:15}}>{mode==="login"?"Sign in":"Create account"} <ArrowRight size={15} style={{verticalAlign:"middle"}}/></button>
+  </form>
+  <div className="demo-box"><b>Demo access</b><br/>Manager: manager@polargrid.demo<br/>Admin: admin@polargrid.demo<br/>Operations: operations@polargrid.demo<br/>Password: PolarGrid123</div>
+ </div></div>
 }
 
 function Sidebar({page,setPage,open,setOpen,onLogout}){
@@ -156,15 +201,18 @@ function Reports({d,a}){const rows=[["Current generation",`${a.generation} kW`,a
 function Page({title,sub,children}){return <div><div className="page-title"><div><div className="eyebrow">PolarGrid workspace</div><h1>{title}</h1><p>{sub}</p></div></div>{children}</div>}
 
 function App(){
- const [view,setView]=useState("landing"),[page,setPage]=useState("dashboard"),[role,setRole]=useState("manager"),[sideOpen,setSideOpen]=useState(false),[stationData,setStationData]=useState(DEMO_STATION);
+ const [view,setView]=useState(()=>{try{return localStorage.getItem("polargrid_session")?"app":"landing"}catch{return "landing"}}),[page,setPage]=useState("dashboard"),[role,setRole]=useState("manager"),[currentUser,setCurrentUser]=useState(null),[sideOpen,setSideOpen]=useState(false),[stationData,setStationData]=useState(DEMO_STATION);
  const analysis=useMemo(()=>derive(stationData),[stationData]);
- const login=email=>{setRole(email.startsWith("admin")?"admin":email.startsWith("operations")?"operations":"manager");setView("app")};
+ React.useEffect(()=>{try{const session=JSON.parse(localStorage.getItem("polargrid_session")||"null");if(session){setCurrentUser(session);setRole(session.role||"manager");setView("app");}}catch{localStorage.removeItem("polargrid_session");}seedDemoUsers();},[]);
+ const login=user=>{setCurrentUser(user);setRole(user.role||"manager");setView("app");setPage("dashboard")};
+ const logout=()=>{localStorage.removeItem("polargrid_session");setCurrentUser(null);setRole("manager");setPage("dashboard");setView("landing")};
  const runAnalysis=data=>{setStationData({...data,currentGeneration:Number(data.solarGeneration)+Number(data.windGeneration)});setPage("dashboard")};
  const resetDemo=()=>{setStationData(DEMO_STATION);setPage("dashboard")};
  if(view==="landing") return <Landing onLogin={()=>setView("login")}/>;
  if(view==="login") return <Login onLogin={login} onBack={()=>setView("landing")}/>;
- const content={data:<StationData data={stationData} onRun={runAnalysis} onDemo={resetDemo}/>,dashboard:<DashboardHome d={stationData} a={analysis}/>,monitoring:<Monitoring d={stationData} a={analysis}/>,forecast:<Forecast d={stationData} a={analysis}/>,renewable:<Renewable d={stationData} a={analysis}/>,storage:<Storage d={stationData} a={analysis}/>,fuel:<FuelOptimization d={stationData} a={analysis}/>,recommendations:<RecommendationsPage d={stationData} a={analysis}/>,alerts:<AlertsPage d={stationData} a={analysis}/>,simulation:<Simulation d={stationData} a={analysis}/>,analytics:<Analytics d={stationData} a={analysis}/>,reports:<Reports d={stationData} a={analysis}/>}[page]||<DashboardHome d={stationData} a={analysis}/>;
- return <div className="shell"><Sidebar page={page} setPage={setPage} open={sideOpen} setOpen={setSideOpen} onLogout={()=>setView("landing")}/><main className="main"><div className="dash-top"><div style={{display:"flex",alignItems:"center",gap:10}}><button className="menu-btn" onClick={()=>setSideOpen(true)}><Menu size={18}/></button><span style={{fontSize:12,color:"#7890a2"}}>{stationData.stationName}</span></div><div className="user-pill"><span>{role==="admin"?"Administrator":role==="operations"?"Operations Personnel":"Station Energy Manager"}</span><div className="avatar"><User size={15}/></div></div></div><div className="dashboard">{content}</div></main></div>
+ const roleLabel=role==="admin"?"Station Administrator":role==="operations"?"Operations Personnel":"Station Energy Manager";
+ const content={data:<StationData data={stationData} onRun={runAnalysis} onDemo={resetDemo}/>,dashboard:<DashboardHome d={stationData} a={analysis}/>,monitoring:<Monitoring d={stationData} a={analysis}/>,forecast:<Forecast d={stationData} a={analysis}/>,renewable:<Renewable d={stationData} a={analysis}/>,storage:<Storage d={stationData} a={analysis}/>,fuel:<FuelOptimization d={stationData} a={analysis}/>,recommendations:<RecommendationsPage d={stationData} a={analysis}/>,alerts:<AlertsPage d={stationData} a={analysis}/>,simulation:<Simulation d={stationData} a={analysis}/>,analytics:<Analytics d={stationData} a={analysis}/>,reports:<Reports d={stationData} a={analysis}/>} [page]||<DashboardHome d={stationData} a={analysis}/>;
+ return <div className="shell"><Sidebar page={page} setPage={setPage} open={sideOpen} setOpen={setSideOpen} onLogout={logout}/><main className="main"><div className="dash-top"><div style={{display:"flex",alignItems:"center",gap:10}}><button className="menu-btn" onClick={()=>setSideOpen(true)}><Menu size={18}/></button><span style={{fontSize:12,color:"#7890a2"}}>{stationData.stationName}</span></div><div className="user-pill"><span>{currentUser?.name||roleLabel} • {roleLabel}</span><div className="avatar"><User size={15}/></div></div></div><div className="dashboard">{content}</div></main></div>
 }
 
 createRoot(document.getElementById("root")).render(<App/>);
